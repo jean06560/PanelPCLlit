@@ -1,6 +1,6 @@
 # PanelPC
 
-PanelPC is a native Linux controller for the PCPanel Lite/Mini with four clickable RGB knobs. It controls PipeWire/PulseAudio audio, device lighting, and OBS Studio through WebSocket 5. The current development branch adds a native Qt 6 desktop interface while retaining the loopback HTTP service as an authenticated integration API.
+PanelPC is a native Linux controller for the PCPanel Lite/Mini with four clickable RGB knobs. It controls PipeWire/PulseAudio audio, device lighting, and OBS Studio through WebSocket 5. It provides a native Qt 6 desktop interface and an authenticated local integration API.
 
 ![PanelPC native interface showing four side-by-side knob controls, RGB spectrum mode, audio, OBS, and shell actions](assets/interface.png)
 
@@ -32,7 +32,6 @@ This project was built specifically for Linux and communicates directly with `hi
 - Native Qt 6 interface with the four physical controls presented side by side.
 - System tray controls for opening the panel, global OBS/API settings, application information, and quitting; closing the main window keeps PanelPC available in the tray.
 - The controller, interface, USB handling, and integration API run in one process; the desktop interface is not an HTTP client.
-- The embedded web interface remains available as a compatibility fallback during the native-interface transition.
 - Bounded queues and event coalescing to avoid blocking the desktop or flooding USB.
 
 Exposing the panel as an OpenRGB device is considered a future enhancement and is not part of the current implementation.
@@ -58,25 +57,12 @@ AI assistance is not a substitute for code review. Automated tests, Go's race de
 
 ## Building
 
-The headless/web build requires Go 1.23 or newer:
+### Native Qt interface
+
+Building the desktop executable requires Go 1.23 or newer, a C++ compiler, `pkg-config`, and the Qt 6 development files. These are build-time requirements only; running the resulting binary requires the compatible Qt 6 shared libraries, not the SDK or headers.
 
 ```bash
 make test
-make build
-./build/panelpc
-```
-
-The interface opens at `http://127.0.0.1:8765`. To run without opening a browser:
-
-```bash
-./build/panelpc -no-browser
-```
-
-### Native Qt interface
-
-Building the desktop executable requires a C++ compiler, `pkg-config`, and the Qt 6 development files in addition to Go. These are build-time requirements only; running the resulting binary requires the compatible Qt 6 shared libraries, not the SDK or headers.
-
-```bash
 make build-qt
 ./build/panelpc-qt
 ```
@@ -135,20 +121,6 @@ Run every installation command as the regular desktop user, without `sudo`. The 
 systemctl --user disable --now panelpc.service
 ```
 
-### Headless/web ZIP
-
-The ZIP contains the static headless controller and web interface. Download it for your architecture, verify the release checksum, extract it, and inspect the installer before running it:
-
-```bash
-sha256sum -c SHA256SUMS
-unzip panelpc-linux-amd64.zip
-cd panelpc-linux-amd64
-less install.sh
-./install.sh --user
-```
-
-The rootless `--user` installation places the headless binary in `~/.local/bin`, installs a systemd user unit, and starts PanelPC in the current desktop session.
-
 ### Bazzite and other immutable/stateless distributions
 
 The AppImage user installation is recommended:
@@ -157,17 +129,11 @@ The AppImage user installation is recommended:
 ./PanelPC-x86_64.AppImage --install-user --autostart
 ```
 
-This mode is designed for Bazzite, Fedora Atomic desktops such as Silverblue and Kinoite, SteamOS, and similar systems. It writes only to the user's home directory, survives operating-system image updates, and does not use `rpm-ostree`, layering, or writable overlays. The headless ZIP's `./install.sh --user` remains available if a web-only service is preferred.
+This mode is designed for Bazzite, Fedora Atomic desktops such as Silverblue and Kinoite, SteamOS, and similar systems. It writes only to the user's home directory, survives operating-system image updates, and does not use `rpm-ostree`, layering, or writable overlays.
 
 ### Traditional distributions
 
-The AppImage `--install-user` mode is also recommended on Fedora, Ubuntu, Debian, Arch Linux, and other conventional distributions. The headless ZIP additionally offers an optional system-wide binary installation:
-
-```bash
-./install.sh --system
-```
-
-Do not run the installer itself with `sudo`. In `--system` mode it requests `sudo` only while copying the binary to `/usr/local/bin`; PanelPC still runs as a systemd user service so it can access the user's PipeWire session and OBS instance.
+The AppImage `--install-user` mode is also recommended on Fedora, Ubuntu, Debian, Arch Linux, and other conventional distributions.
 
 ### No drivers or device-permission changes
 
@@ -300,15 +266,15 @@ Each profile stores all four assignments and the complete lighting configuration
 
 ## Safety recommendations
 
-- **Do not run PanelPC, its AppImage management options, or `install.sh` as root.** Audio, OBS, and desktop-session permissions belong to the logged-in user.
+- **Do not run PanelPC or its AppImage management options as root.** Audio, OBS, and desktop-session permissions belong to the logged-in user.
 - Do not run PanelPC at the same time as another PCPanel controller. Two processes competing for the same HID device can produce unreliable behavior.
-- Keep the web interface on its default loopback address. Do not expose it to a LAN or the internet.
+- Keep the integration API on its default loopback address. Do not expose it to a LAN or the internet.
 - Shell actions intentionally execute `/bin/sh -c`. Review every configured command and never paste untrusted commands into the interface.
 - Application actions only expose valid Freedesktop entries, but desktop shortcuts are still executable content. Select them only from applications and locations you trust.
-- Inspect `install.sh` and verify `SHA256SUMS` before installing a downloaded release.
+- Verify the checksum before installing a downloaded release.
 - Do not apply unrelated driver, group, or `udev` instructions from another PCPanel application to PanelPC.
 
-The configuration, including the OBS password and persistent integration token, is stored with `0600` permissions in `~/.config/panelpc/config.json`. The legacy web interface uses a separate random per-process token embedded into its page. The integration API requires its bearer token on every request.
+The configuration, including the OBS password and persistent integration token, is stored with `0600` permissions in `~/.config/panelpc/config.json`. The integration API requires its bearer token on every request.
 
 ## Continuous integration and releases
 
