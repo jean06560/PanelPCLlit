@@ -45,7 +45,9 @@ AI assistance is not a substitute for code review. Automated tests, Go's race de
 ## Why it should not freeze the desktop
 
 - It reads only the PCPanel `hidraw` node; it never captures keyboard or mouse input.
+- The device reader blocks in the kernel until the panel sends a report; it does not poll, so an idle panel costs no CPU wakeups.
 - The HID queue has a fixed capacity of 32 events and never blocks the device reader.
+- A USB reset during resume from suspend clears the panel's lighting without disconnecting it. PanelPC checks every 2 seconds whether the system slept and, if so, sends the lighting again.
 - Knob turns provide absolute values, so only the latest value for each knob is retained every 50 ms.
 - Only one external operation runs at a time, with at most one additional operation waiting.
 - Every `wpctl` or `pactl` call times out after 1.5 seconds.
