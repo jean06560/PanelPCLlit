@@ -89,10 +89,8 @@ func (e *Engine) Status() Status {
 func (e *Engine) Run(ctx context.Context) {
 	go e.worker(ctx)
 	go e.vu.Run(ctx)
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
-	pending := make(map[int]job)
-	var nextShell [4]time.Time
+	turns := newTurnScheduler(turnInterval)
+	defer turns.stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -106,7 +104,7 @@ func (e *Engine) Run(ctx context.Context) {
 			cfg := e.knobConfig(event.Knob)
 			j := job{knob: event.Knob, event: event, cfg: cfg}
 			if event.Kind == "turn" {
-				pending[event.Knob] = j
+				turns.add(j, e.work, time.Now())
 			} else if event.Value == 1 {
 				select {
 				case e.work <- j:
@@ -114,23 +112,73 @@ func (e *Engine) Run(ctx context.Context) {
 					e.setError("action queue full; click dropped")
 				}
 			}
-		case <-ticker.C:
-			now := time.Now()
-			for knob, j := range pending {
-				if j.cfg.Turn.Kind == "shell" && now.Before(nextShell[knob]) {
-					continue
-				}
-				select {
-				case e.work <- j:
-					delete(pending, knob)
-					if j.cfg.Turn.Kind == "shell" {
-						nextShell[knob] = now.Add(time.Duration(j.cfg.Turn.RateMS) * time.Millisecond)
-					}
-				default:
-					// Retain only the latest absolute value for each knob.
-				}
-			}
+		case <-turns.C():
+			turns.tick(e.work, time.Now())
 		}
+	}
+}
+
+const turnInterval = 50 * time.Millisecond
+
+// turnScheduler coalesces knob turns: it dispatches at most once per interval
+// and keeps only the latest absolute value per knob in between. Its timer runs
+// only while turns are arriving, so an idle panel causes no wakeups.
+type turnScheduler struct {
+	interval  time.Duration
+	pending   map[int]job
+	nextShell [4]time.Time
+	timer     *time.Timer
+}
+
+func newTurnScheduler(interval time.Duration) *turnScheduler {
+	return &turnScheduler{interval: interval, pending: make(map[int]job)}
+}
+
+// C is nil while idle, which disables its select case.
+func (s *turnScheduler) C() <-chan time.Time {
+	if s.timer == nil {
+		return nil
+	}
+	return s.timer.C
+}
+
+// add dispatches immediately when no interval is running; otherwise the turn
+// waits for the next tick.
+func (s *turnScheduler) add(j job, work chan<- job, now time.Time) {
+	s.pending[j.knob] = j
+	if s.timer == nil {
+		s.flush(work, now)
+	}
+}
+
+func (s *turnScheduler) tick(work chan<- job, now time.Time) {
+	s.timer = nil
+	if len(s.pending) > 0 {
+		s.flush(work, now)
+	}
+}
+
+func (s *turnScheduler) flush(work chan<- job, now time.Time) {
+	for knob, j := range s.pending {
+		if j.cfg.Turn.Kind == "shell" && now.Before(s.nextShell[knob]) {
+			continue
+		}
+		select {
+		case work <- j:
+			delete(s.pending, knob)
+			if j.cfg.Turn.Kind == "shell" {
+				s.nextShell[knob] = now.Add(time.Duration(j.cfg.Turn.RateMS) * time.Millisecond)
+			}
+		default:
+			// Retain only the latest absolute value for each knob.
+		}
+	}
+	s.timer = time.NewTimer(s.interval)
+}
+
+func (s *turnScheduler) stop() {
+	if s.timer != nil {
+		s.timer.Stop()
 	}
 }
 
