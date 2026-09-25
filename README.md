@@ -38,7 +38,7 @@ Exposing the panel as an OpenRGB device is considered a future enhancement and i
 
 ## AI-assisted development
 
-This project does not hide its use of artificial intelligence. The initial design, code, and documentation were developed with assistance from **OpenAI Codex**, under human direction. Functional decisions were specified and reviewed by the hardware owner, and the integrations were tested during development with a real PCPanel Mini, a PipeWire/PulseAudio session, and OBS Studio.
+This project does not hide its use of artificial intelligence. The initial design, code, and documentation were developed with assistance from **OpenAI Codex**, under human direction. Functional decisions were specified and reviewed by the hardware owner, and the integrations were tested during development with a real PCPanel Mini, a PipeWire/PulseAudio session, and OBS Studio. Later contributions were developed with assistance from **Anthropic Claude** (Claude Code), under the same human direction: the suspend/resume lighting fix and the removal of idle polling were diagnosed, reviewed, and tested on real hardware by the contributor.
 
 AI assistance is not a substitute for code review. Automated tests, Go's race detector, and static analysis are run before builds. Review the code and any configured commands before using it on another system.
 
